@@ -87,6 +87,16 @@ async function batchTransferETH(provider, wallet, recipients, dryRun = false, ga
   
   const results = [...previousResults];
   let nonce = await provider.getTransactionCount(wallet.address);
+  
+  // 断点续传：校验链上 nonce 与进度记录
+  if (completedCount > 0) {
+    const onChainNonce = nonce; // getTransactionCount 返回下一个可用 nonce
+    const successInProgress = previousResults.filter(r => r.success).length;
+    if (onChainNonce > successInProgress) {
+      console.log(`⚠️  警告：链上 nonce(${onChainNonce}) > 进度成功数(${successInProgress})，可能有交易已上链但未记录`);
+      console.log(`   建议检查链上交易记录，避免重复转账\n`);
+    }
+  }
   for (let i = 0; i < transactions.length; i++) {
     const tx = transactions[i];
     
@@ -232,6 +242,16 @@ async function batchTransferToken(provider, wallet, tokenAddress, recipients, dr
   
   const results = [...previousResults];
   let nonce = await provider.getTransactionCount(wallet.address);
+  
+  // 断点续传：校验链上 nonce 与进度记录
+  if (completedCount > 0) {
+    const onChainNonce = nonce;
+    const successInProgress = previousResults.filter(r => r.success).length;
+    if (onChainNonce > successInProgress) {
+      console.log(`⚠️  警告：链上 nonce(${onChainNonce}) > 进度成功数(${successInProgress})，可能有交易已上链但未记录`);
+      console.log(`   建议检查链上交易记录，避免重复转账\n`);
+    }
+  }
   for (let i = 0; i < transactions.length; i++) {
     const tx = transactions[i];
     
