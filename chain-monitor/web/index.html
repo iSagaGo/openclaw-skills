@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chain Monitor Dashboard</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0d1117;color:#c9d1d9;min-height:100vh}
+.header{background:#161b22;border-bottom:1px solid #30363d;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.header h1{font-size:20px;color:#58a6ff}
+.header h1 span{color:#8b949e;font-weight:normal;font-size:14px;margin-left:8px}
+.stats{display:flex;gap:16px;flex-wrap:wrap}
+.stat{background:#21262d;border:1px solid #30363d;border-radius:8px;padding:8px 16px;text-align:center}
+.stat .num{font-size:22px;font-weight:700;color:#58a6ff}
+.stat .label{font-size:11px;color:#8b949e;margin-top:2px}
+.controls{background:#161b22;border-bottom:1px solid #30363d;padding:12px 24px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.controls input,.controls select{background:#0d1117;border:1px solid #30363d;color:#c9d1d9;padding:6px 12px;border-radius:6px;font-size:13px}
+.controls input{width:220px}
+.controls select{min-width:120px}
+.controls label{font-size:13px;color:#8b949e;display:flex;align-items:center;gap:4px;cursor:pointer}
+.controls input[type=checkbox]{width:auto}
+.btn{background:#21262d;border:1px solid #30363d;color:#c9d1d9;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px}
+.btn:hover{background:#30363d}
+.btn.active{background:#1f6feb;border-color:#1f6feb;color:#fff}
+.container{padding:16px 24px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:#161b22;color:#8b949e;font-weight:600;text-align:left;padding:10px 12px;border-bottom:2px solid #30363d;position:sticky;top:0;cursor:pointer;white-space:nowrap;user-select:none}
+th:hover{color:#58a6ff}
+th .arrow{margin-left:4px;font-size:10px}
+td{padding:8px 12px;border-bottom:1px solid #21262d;white-space:nowrap}
+tr:hover{background:#161b22}
+.ai-tag{background:#1a4b2e;color:#3fb950;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.trust-good{color:#3fb950;font-weight:600}
+.trust-warn{color:#d29922;font-weight:600}
+.trust-bad{color:#f85149;font-weight:600}
+.liq-red{color:#f85149;font-weight:600}
+.liq-yellow{color:#d29922}
+.liq-normal{color:#c9d1d9}
+.addr{font-family:'SF Mono',Consolas,monospace;font-size:12px;color:#8b949e}
+.addr a{color:#58a6ff;text-decoration:none}
+.addr a:hover{text-decoration:underline}
+.social a{color:#58a6ff;text-decoration:none;margin-right:8px;font-size:12px}
+.social a:hover{text-decoration:underline}
+.score-bar{display:inline-block;width:60px;height:8px;background:#21262d;border-radius:4px;overflow:hidden;vertical-align:middle;margin-right:6px}
+.score-fill{height:100%;border-radius:4px}
+.updated{color:#484f58;font-size:12px;text-align:right;padding:8px 24px}
+.empty{text-align:center;padding:60px;color:#484f58;font-size:16px}
+@media(max-width:768px){
+  .header{padding:12px 16px}
+  .controls{padding:8px 16px}
+  .container{padding:8px 12px}
+  table{font-size:12px}
+  td,th{padding:6px 8px}
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>⛓️ Chain Monitor <span>Base</span></h1>
+  <div class="stats" id="stats"></div>
+</div>
+<div class="controls">
+  <input type="text" id="search" placeholder="🔍 搜索 symbol / 地址...">
+  <select id="filterType">
+    <option value="all">全部项目</option>
+    <option value="ai">🤖 AI挖矿</option>
+    <option value="dup">⚠️ 有同名</option>
+    <option value="social">🌐 有社交</option>
+  </select>
+  <select id="filterAge">
+    <option value="0">全部时间</option>
+    <option value="1">1小时内</option>
+    <option value="6">6小时内</option>
+    <option value="24" selected>24小时内</option>
+    <option value="48">48小时内</option>
+    <option value="72">72小时内</option>
+  </select>
+  <select id="filterLiq">
+    <option value="0">全部流动性</option>
+    <option value="10000">≥$10K</option>
+    <option value="20000">≥$20K</option>
+    <option value="50000">≥$50K</option>
+  </select>
+  <label><input type="checkbox" id="hideHoneypot" checked> 隐藏蜜罐</label>
+  <button class="btn" onclick="loadData()">🔄 刷新</button>
+</div>
+<div class="container">
+  <table>
+    <thead><tr id="thead"></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <div class="empty" id="empty" style="display:none">暂无数据</div>
+</div>
+<div class="updated" id="updated"></div>
+
+<script>
+let allProjects=[], sortCol='open_timestamp', sortAsc=false;
+const cols=[
+  {key:'trust_rank',label:'可信度',w:'80px'},
+  {key:'symbol',label:'Symbol',w:'100px'},
+  {key:'is_ai_mining',label:'类型',w:'60px'},
+  {key:'market_cap',label:'MC',w:'90px'},
+  {key:'liquidity',label:'流动性',w:'90px'},
+  {key:'mc_liq_ratio',label:'MC/Liq',w:'70px'},
+  {key:'holders',label:'持有人',w:'70px'},
+  {key:'price_change_1h',label:'1h涨幅',w:'80px'},
+  {key:'volume_1h',label:'1h量',w:'90px'},
+  {key:'age_hours',label:'年龄',w:'70px'},
+  {key:'trust_score',label:'评分',w:'100px'},
+  {key:'social',label:'社交',w:'80px'},
+  {key:'source',label:'来源',w:'60px'},
+];
+
+function fmtMC(v){
+  if(!v)return'-';
+  if(v>=1e9)return'$'+(v/1e9).toFixed(2)+'B';
+  if(v>=1e6)return'$'+(v/1e6).toFixed(2)+'M';
+  if(v>=1e3)return'$'+(v/1e3).toFixed(0)+'K';
+  return'$'+v.toFixed(0);
+}
+function fmtPct(v){
+  v=parseFloat(v)||0;
+  let c=v>0?'#3fb950':v<0?'#f85149':'#8b949e';
+  return`<span style="color:${c}">${v>0?'+':''}${v.toFixed(1)}%</span>`;
+}
+function fmtScore(s){
+  s=s||0;let pct=s/15*100;
+  let c=s>=10?'#3fb950':s>=5?'#d29922':'#f85149';
+  return`<span class="score-bar"><span class="score-fill" style="width:${pct}%;background:${c}"></span></span>${s}/15`;
+}
+function fmtTrust(r){
+  if(!r)return'<span style="color:#484f58">-</span>';
+  if(r.includes('真品'))return`<span class="trust-good">${r}</span>`;
+  if(r.includes('待验证'))return`<span class="trust-warn">${r}</span>`;
+  if(r.includes('仿盘'))return`<span class="trust-bad">${r}</span>`;
+  return r;
+}
+function fmtLiq(v,level){
+  let cls=level==='red'?'liq-red':level==='yellow'?'liq-yellow':'liq-normal';
+  let icon=level==='red'?'🔴':level==='yellow'?'🟡':'';
+  return`<span class="${cls}">${icon}${fmtMC(v)}</span>`;
+}
+function fmtAge(h){
+  if(!h&&h!==0)return'-';
+  if(h<1)return(h*60).toFixed(0)+'m';
+  if(h<24)return h.toFixed(1)+'h';
+  return(h/24).toFixed(1)+'d';
+}
+
+function renderHead(){
+  let tr=document.getElementById('thead');
+  tr.innerHTML=cols.map(c=>{
+    let arrow=sortCol===c.key?(sortAsc?'▲':'▼'):'';
+    return`<th data-col="${c.key}" style="min-width:${c.w}">${c.label}<span class="arrow">${arrow}</span></th>`;
+  }).join('');
+  tr.querySelectorAll('th').forEach(th=>{
+    th.onclick=()=>{
+      let k=th.dataset.col;
+      if(k==='social')return;
+      if(sortCol===k)sortAsc=!sortAsc;
+      else{sortCol=k;sortAsc=false;}
+      render();
+    };
+  });
+}
+
+function getFiltered(){
+  let q=document.getElementById('search').value.toLowerCase();
+  let type=document.getElementById('filterType').value;
+  let age=parseFloat(document.getElementById('filterAge').value);
+  let liq=parseFloat(document.getElementById('filterLiq').value);
+  let hideHP=document.getElementById('hideHoneypot').checked;
+  return allProjects.filter(p=>{
+    if(q&&!p.symbol.toLowerCase().includes(q)&&!p.address.includes(q))return false;
+    if(type==='ai'&&!p.is_ai_mining)return false;
+    if(type==='dup'&&!p.trust_rank)return false;
+    if(type==='social'&&!p.twitter&&!p.website)return false;
+    if(age>0&&(p.age_hours||999)>age)return false;
+    if(liq>0&&(p.liquidity||0)<liq)return false;
+    if(hideHP&&p.is_honeypot)return false;
+    return true;
+  });
+}
+
+function render(){
+  renderHead();
+  let filtered=getFiltered();
+  filtered.sort((a,b)=>{
+    let va=a[sortCol],vb=b[sortCol];
+    if(typeof va==='string')va=va.toLowerCase();
+    if(typeof vb==='string')vb=vb.toLowerCase();
+    va=va||0;vb=vb||0;
+    return sortAsc?(va>vb?1:-1):(va<vb?1:-1);
+  });
+  let tbody=document.getElementById('tbody');
+  let empty=document.getElementById('empty');
+  if(!filtered.length){tbody.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  tbody.innerHTML=filtered.map(p=>{
+    let social='';
+    if(p.website)social+=`<a href="${p.website}" target="_blank">🌐</a>`;
+    if(p.twitter)social+=`<a href="https://x.com/${p.twitter}" target="_blank">𝕏</a>`;
+    if(p.telegram)social+=`<a href="${p.telegram}" target="_blank">💬</a>`;
+    return`<tr>
+      <td>${fmtTrust(p.trust_rank)}</td>
+      <td><strong>${p.symbol}</strong><br><span class="addr"><a href="${p.gmgn_url||'https://gmgn.ai/base/token/'+p.address}" target="_blank">${p.address.slice(0,6)}...${p.address.slice(-4)}</a></span></td>
+      <td>${p.is_ai_mining?'<span class="ai-tag">AI</span>':'📊'}</td>
+      <td>${fmtMC(p.market_cap)}</td>
+      <td>${fmtLiq(p.liquidity,p.liq_level)}</td>
+      <td>${p.mc_liq_ratio||'-'}x</td>
+      <td>${(p.holders||0).toLocaleString()}</td>
+      <td>${fmtPct(p.price_change_1h)}</td>
+      <td>${fmtMC(p.volume_1h)}</td>
+      <td>${fmtAge(p.age_hours)}</td>
+      <td>${fmtScore(p.trust_score)}</td>
+      <td class="social">${social||'-'}</td>
+      <td>${p.source||'-'}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadData(){
+  try{
+    let[pRes,sRes]=await Promise.all([fetch('/api/projects'),fetch('/api/stats')]);
+    let pData=await pRes.json(), sData=await sRes.json();
+    allProjects=pData.projects||[];
+    let st=document.getElementById('stats');
+    st.innerHTML=`
+      <div class="stat"><div class="num">${sData.active_48h||0}</div><div class="label">48h活跃</div></div>
+      <div class="stat"><div class="num">${sData.ai_mining||0}</div><div class="label">AI挖矿</div></div>
+      <div class="stat"><div class="num">${sData.duplicates_scored||0}</div><div class="label">同名评分</div></div>
+      <div class="stat"><div class="num">${sData.total_tracked||0}</div><div class="label">总追踪</div></div>
+    `;
+    document.getElementById('updated').textContent='更新: '+sData.updated;
+    render();
+  }catch(e){console.error(e);}
+}
+
+document.getElementById('search').oninput=render;
+document.getElementById('filterType').onchange=render;
+document.getElementById('filterAge').onchange=render;
+document.getElementById('filterLiq').onchange=render;
+document.getElementById('hideHoneypot').onchange=render;
+loadData();
+setInterval(loadData,60000);
+</script>
+</body>
+</html>

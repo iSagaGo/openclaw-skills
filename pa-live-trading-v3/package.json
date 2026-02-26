@@ -1,0 +1,31 @@
+{
+  "name": "pa-live-trading-v3-dual",
+  "version": "3.0.0",
+  "description": "PA Live Trading V3 - 双币种自动交易系统（SOL 1h + BTC 1h）",
+  "main": "live-trading-core-dual.js",
+  "scripts": {
+    "start:sim": "./start-dual-sim.sh",
+    "start:real": "./start-dual-real.sh",
+    "stop:sim": "./stop-sim.sh",
+    "stop:real": "./stop-real.sh",
+    "monitor": "node monitor.js",
+    "backtest": "node backtest-dual.js",
+    "test:api": "node test-api.js"
+  },
+  "keywords": [
+    "trading",
+    "crypto",
+    "binance",
+    "automation",
+    "price-action",
+    "dual-asset"
+  ],
+  "author": "大富小姐姐 🎀",
+  "license": "MIT",
+  "dependencies": {
+    "binance-api-node": "^0.12.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
